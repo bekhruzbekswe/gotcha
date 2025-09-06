@@ -1,0 +1,2182 @@
+# Highlight-Explain API: MVP Technical Documentation
+
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Technical Stack](#technical-stack)
+- [Feature Specifications](#feature-specifications)
+- [API Documentation](#api-documentation)
+- [Database Schema](#database-schema)
+- [Development Setup](#development-setup)
+- [Testing Strategy](#testing-strategy)
+- [Deployment Guide](#deployment-guide)
+- [Security Considerations](#security-considerations)
+- [Performance & Monitoring](#performance--monitoring)
+- [Future Roadmap](#future-roadmap)
+
+---
+
+## Project Overview
+
+### Vision Statement
+The Highlight-Explain API is an intelligent text explanation service that allows users to highlight any text and receive AI-powered explanations tailored to their learning preferences.
+
+### Core Value Proposition
+- **Instant Understanding**: Users get immediate, contextual explanations for any text they highlight
+- **Personalized Learning**: AI explanations adapt to user preferences (tone, complexity, style)
+- **Learning History**: Track and revisit past explanations for continuous learning
+- **Universal Integration**: Designed for future browser extension and mobile app integration
+
+### MVP Success Metrics
+- User registration and authentication success rate > 95%
+- AI explanation generation success rate > 90%
+- Average response time < 2 seconds for explanations
+- User preference customization adoption > 60%
+
+---
+
+## Architecture
+
+### System Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Web[Web App]
+        Mobile[Mobile App - Future]
+        Extension[Browser Extension - Future]
+    end
+    
+    subgraph "API Gateway"
+        Gateway[Express.js API Gateway]
+        Auth[JWT Authentication]
+        RateLimit[Rate Limiting]
+    end
+    
+    subgraph "Application Layer"
+        AuthFeature[Auth Feature]
+        HighlightFeature[Highlight Feature]
+        AIFeature[AI Feature]
+        PrefsFeature[Preferences Feature]
+    end
+    
+    subgraph "Data Layer"
+        PostgresDB[(PostgreSQL)]
+        MongoDB[(MongoDB)]
+        Redis[(Redis - Future)]
+    end
+    
+    subgraph "External Services"
+        OpenAI[OpenAI API]
+    end
+    
+    Web --> Gateway
+    Mobile --> Gateway
+    Extension --> Gateway
+    
+    Gateway --> Auth
+    Gateway --> RateLimit
+    
+    Gateway --> AuthFeature
+    Gateway --> HighlightFeature
+    Gateway --> AIFeature
+    Gateway --> PrefsFeature
+    
+    AuthFeature --> PostgresDB
+    PrefsFeature --> PostgresDB
+    HighlightFeature --> MongoDB
+    AIFeature --> OpenAI
+    
+    HighlightFeature --> AIFeature
+    HighlightFeature --> PrefsFeature
+    HighlightFeature --> AuthFeature
+```
+
+### Feature-Based Architecture
+
+```mermaid
+graph LR
+    subgraph "Features (Independent Modules)"
+        Auth[🔐 Auth Feature]
+        AI[🤖 AI Feature]
+        Highlights[🎯 Highlights Feature]
+        Prefs[⚙️ Preferences Feature]
+    end
+    
+    subgraph "Shared Infrastructure"
+        DB[Database Services]
+        Utils[Utilities]
+        Middleware[Middleware]
+        Types[Shared Types]
+    end
+    
+    Auth --> DB
+    AI --> Utils
+    Highlights --> DB
+    Prefs --> DB
+    
+    Highlights --> Auth
+    Highlights --> AI
+    Highlights --> Prefs
+    
+    style Auth fill:#e1f5fe
+    style AI fill:#f3e5f5
+    style Highlights fill:#e8f5e8
+    style Prefs fill:#fff3e0
+```
+
+### Data Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API
+    participant Auth
+    participant Highlights
+    participant Prefs
+    participant AI
+    participant DB
+    participant OpenAI
+
+    User->>API: POST /highlights (text + context)
+    API->>Auth: Validate JWT token
+    Auth-->>API: User ID
+    
+    API->>Highlights: Create highlight request
+    Highlights->>Prefs: Get user preferences
+    Prefs->>DB: Query preferences
+    DB-->>Prefs: User preferences
+    Prefs-->>Highlights: Preferences data
+    
+    Highlights->>AI: Generate explanation
+    AI->>OpenAI: API request with context
+    OpenAI-->>AI: Explanation response
+    AI-->>Highlights: Processed explanation
+    
+    Highlights->>DB: Store highlight + explanation
+    DB-->>Highlights: Saved record
+    Highlights-->>API: Complete highlight object
+    API-->>User: 201 Created + highlight data
+```
+
+---
+
+## Technical Stack
+
+### Core Technologies
+
+| Category | Technology | Version | Purpose |
+|----------|------------|---------|---------|
+| **Runtime** | Node.js | 18.x+ | JavaScript runtime environment |
+| **Framework** | Express.js | 4.18+ | Web application framework |
+| **Language** | TypeScript | 5.1+ | Type-safe JavaScript development |
+| **Testing** | Jest | 29.x | Unit and integration testing |
+| **API Testing** | Supertest | 6.x | HTTP endpoint testing |
+
+### Database Stack
+
+| Database | Purpose | Data Types |
+|----------|---------|------------|
+| **PostgreSQL** | Primary database | Users, preferences, structured data |
+| **MongoDB** | Document storage | AI explanations, highlight content |
+| **Redis** (Future) | Caching & sessions | Temporary data, rate limiting |
+
+### External Services
+
+| Service | Purpose | Fallback Strategy |
+|---------|---------|-------------------|
+| **OpenAI API** | Text explanation generation | Error responses with retry logic |
+
+### Development Tools
+
+| Tool | Purpose |
+|------|---------|
+| **ts-node-dev** | Development server with hot reload |
+| **ESLint** | Code linting and style enforcement |
+| **Prettier** | Code formatting |
+| **Husky** | Git hooks for quality gates |
+| **Docker** | Containerization and deployment |
+
+---
+
+## Feature Specifications
+
+### 🔐 Auth Feature
+
+#### Responsibilities
+- User registration and authentication
+- JWT token generation and validation
+- Password hashing and security
+- User session management
+
+#### Core Components
+
+```mermaid
+graph TB
+    subgraph "Auth Feature"
+        Controller[AuthController]
+        Service[AuthService]
+        Middleware[AuthMiddleware]
+        Types[Auth Types]
+        Routes[Auth Routes]
+    end
+    
+    subgraph "External Dependencies"
+        JWT[JWT Library]
+        Bcrypt[Bcrypt Library]
+        DB[(PostgreSQL)]
+    end
+    
+    Controller --> Service
+    Service --> JWT
+    Service --> Bcrypt
+    Service --> DB
+    Middleware --> JWT
+```
+
+#### API Endpoints
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User authentication
+- `POST /api/auth/refresh` - Token refresh
+- `GET /api/auth/profile` - Get user profile
+- `PUT /api/auth/profile` - Update user profile
+
+### 🎯 Highlights Feature
+
+#### Responsibilities
+- Process text highlights from users
+- Coordinate with AI service for explanations
+- Store and retrieve highlight history
+- Manage highlight metadata and context
+
+#### Core Components
+
+```mermaid
+graph TB
+    subgraph "Highlights Feature"
+        Controller[HighlightController]
+        Service[HighlightService]
+        Repository[HighlightRepository]
+        Types[Highlight Types]
+        Routes[Highlight Routes]
+    end
+    
+    subgraph "Dependencies"
+        AI[AI Service]
+        Auth[Auth Service]
+        Prefs[Preferences Service]
+        MongoDB[(MongoDB)]
+    end
+    
+    Controller --> Service
+    Service --> Repository
+    Service --> AI
+    Service --> Auth
+    Service --> Prefs
+    Repository --> MongoDB
+```
+
+#### API Endpoints
+- `POST /api/highlights` - Create new highlight with explanation
+- `GET /api/highlights` - Get user's highlight history
+- `GET /api/highlights/:id` - Get specific highlight
+- `DELETE /api/highlights/:id` - Delete highlight
+
+### 🤖 AI Feature
+
+#### Responsibilities
+- Interface with OpenAI API
+- Generate contextual explanations
+- Handle AI prompt engineering
+- Manage AI response processing
+
+#### Core Components
+
+```mermaid
+graph TB
+    subgraph "AI Feature"
+        Service[AIService]
+        Client[OpenAIClient]
+        PromptEngine[PromptEngine]
+        Types[AI Types]
+    end
+    
+    subgraph "External"
+        OpenAI[OpenAI API]
+    end
+    
+    Service --> Client
+    Service --> PromptEngine
+    Client --> OpenAI
+```
+
+#### Capabilities
+- Text explanation generation
+- Context-aware responses
+- User preference integration
+- Confidence scoring
+- Related concept extraction
+
+### ⚙️ Preferences Feature
+
+#### Responsibilities
+- Manage user learning preferences
+- Store explanation style settings
+- Provide preference data to AI service
+- Handle preference validation
+
+#### Core Components
+
+```mermaid
+graph TB
+    subgraph "Preferences Feature"
+        Controller[PreferencesController]
+        Service[PreferencesService]
+        Repository[PreferencesRepository]
+        Types[Preferences Types]
+        Routes[Preferences Routes]
+    end
+    
+    subgraph "Dependencies"
+        Auth[Auth Service]
+        PostgreSQL[(PostgreSQL)]
+    end
+    
+    Controller --> Service
+    Service --> Repository
+    Service --> Auth
+    Repository --> PostgreSQL
+```
+
+#### Preference Types
+- **Tone**: `simple`, `technical`, `detailed`
+- **Include Analogies**: `boolean`
+- **Max Length**: `50-500 words`
+- **Language**: `en`, `es`, `fr` (future)
+- **Explanation Style**: `bullet-points`, `paragraph`, `step-by-step`
+
+---
+
+## API Documentation
+
+### Authentication
+
+All protected endpoints require a Bearer token in the Authorization header:
+```
+Authorization: Bearer <jwt_token>
+```
+
+### Response Format
+
+#### Success Response
+```json
+{
+  "success": true,
+  "data": { /* response data */ },
+  "message": "Operation successful",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+#### Error Response
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid input data",
+    "details": [
+      {
+        "field": "email",
+        "message": "Invalid email format"
+      }
+    ]
+  },
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### Core Endpoints
+
+#### Auth Endpoints
+
+##### POST /api/auth/register
+Register a new user account.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123",
+  "name": "John Doe"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 1,
+      "email": "user@example.com",
+      "name": "John Doe",
+      "createdAt": "2024-01-15T10:30:00Z"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  },
+  "message": "User registered successfully"
+}
+```
+
+##### POST /api/auth/login
+Authenticate user and receive JWT token.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 1,
+      "email": "user@example.com",
+      "name": "John Doe"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  },
+  "message": "Login successful"
+}
+```
+
+#### Highlight Endpoints
+
+##### POST /api/highlights
+Create a new highlight with AI explanation.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "text": "const fibonacci = (n) => n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);",
+  "context": "JavaScript recursion example from a coding tutorial"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "highlight_123456",
+    "text": "const fibonacci = (n) => n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);",
+    "context": "JavaScript recursion example from a coding tutorial",
+    "explanation": {
+      "content": "This is a recursive implementation of the Fibonacci sequence. The function calls itself with smaller values until it reaches the base case (n <= 1). However, this implementation is inefficient due to repeated calculations.",
+      "confidence": 0.95,
+      "relatedConcepts": ["recursion", "fibonacci", "base case", "time complexity"],
+      "suggestedImprovements": ["Use memoization", "Consider iterative approach"]
+    },
+    "userId": 1,
+    "createdAt": "2024-01-15T10:30:00Z"
+  },
+  "message": "Highlight created and explained successfully"
+}
+```
+
+##### GET /api/highlights
+Retrieve user's highlight history with pagination.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 10, max: 50)
+- `sortBy`: Sort field (`createdAt`, `text`) (default: `createdAt`)
+- `order`: Sort order (`asc`, `desc`) (default: `desc`)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "highlights": [
+      {
+        "id": "highlight_123456",
+        "text": "const fibonacci = (n) => n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);",
+        "explanation": {
+          "content": "This is a recursive implementation...",
+          "confidence": 0.95
+        },
+        "createdAt": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalItems": 25,
+      "hasNext": true,
+      "hasPrev": false
+    }
+  }
+}
+```
+
+#### Preferences Endpoints
+
+##### GET /api/preferences
+Get user's current preferences.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "tone": "simple",
+    "includeAnalogies": true,
+    "maxLength": 150,
+    "explanationStyle": "paragraph",
+    "language": "en"
+  }
+}
+```
+
+##### PUT /api/preferences
+Update user preferences.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "tone": "technical",
+  "includeAnalogies": false,
+  "maxLength": 200,
+  "explanationStyle": "bullet-points"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "tone": "technical",
+    "includeAnalogies": false,
+    "maxLength": 200,
+    "explanationStyle": "bullet-points",
+    "language": "en"
+  },
+  "message": "Preferences updated successfully"
+}
+```
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `VALIDATION_ERROR` | 400 | Invalid request data |
+| `UNAUTHORIZED` | 401 | Invalid or missing authentication |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `NOT_FOUND` | 404 | Resource not found |
+| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
+| `AI_SERVICE_ERROR` | 502 | External AI service failure |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+---
+
+## Database Schema
+
+### PostgreSQL Schema (Structured Data)
+
+```mermaid
+erDiagram
+    users {
+        integer id PK
+        string email UK
+        string password
+        string name
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    preferences {
+        integer id PK
+        integer user_id FK
+        string tone
+        boolean include_analogies
+        integer max_length
+        string explanation_style
+        string language
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    users ||--|| preferences : has
+```
+
+#### Users Table
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_created_at ON users(created_at);
+```
+
+#### Preferences Table
+```sql
+CREATE TABLE preferences (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    tone VARCHAR(50) DEFAULT 'simple' CHECK (tone IN ('simple', 'technical', 'detailed')),
+    include_analogies BOOLEAN DEFAULT true,
+    max_length INTEGER DEFAULT 150 CHECK (max_length BETWEEN 50 AND 500),
+    explanation_style VARCHAR(50) DEFAULT 'paragraph' CHECK (explanation_style IN ('paragraph', 'bullet-points', 'step-by-step')),
+    language VARCHAR(10) DEFAULT 'en',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE UNIQUE INDEX idx_preferences_user_id ON preferences(user_id);
+```
+
+### MongoDB Schema (Document Data)
+
+#### Highlights Collection
+```javascript
+{
+  "_id": ObjectId("..."),
+  "id": "highlight_123456", // UUID for external reference
+  "userId": 1,
+  "text": "const fibonacci = (n) => n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);",
+  "context": "JavaScript recursion example from a coding tutorial",
+  "explanation": {
+    "content": "This is a recursive implementation of the Fibonacci sequence...",
+    "confidence": 0.95,
+    "relatedConcepts": ["recursion", "fibonacci", "base case"],
+    "suggestedImprovements": ["Use memoization", "Consider iterative approach"],
+    "processingTime": 1250, // milliseconds
+    "model": "gpt-3.5-turbo",
+    "promptVersion": "v1.2"
+  },
+  "metadata": {
+    "source": "web-app",
+    "userAgent": "Mozilla/5.0...",
+    "ipAddress": "192.168.1.100", // hashed for privacy
+    "preferences": {
+      "tone": "simple",
+      "includeAnalogies": true,
+      "maxLength": 150
+    }
+  },
+  "createdAt": ISODate("2024-01-15T10:30:00Z"),
+  "updatedAt": ISODate("2024-01-15T10:30:00Z")
+}
+```
+
+#### MongoDB Indexes
+```javascript
+// Compound index for user queries
+db.highlights.createIndex({ "userId": 1, "createdAt": -1 });
+
+// Text search index for finding highlights
+db.highlights.createIndex({ 
+  "text": "text", 
+  "context": "text",
+  "explanation.content": "text" 
+});
+
+// Index for confidence-based queries
+db.highlights.createIndex({ "explanation.confidence": -1 });
+```
+
+---
+
+## Development Setup
+
+### Prerequisites
+- Node.js 18.x or higher
+- PostgreSQL 14.x or higher
+- MongoDB 6.x or higher
+- OpenAI API key
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Server Configuration
+NODE_ENV=development
+PORT=3000
+API_VERSION=v1
+
+# Database Configuration
+DATABASE_URL=postgresql://username:password@localhost:5432/highlight_explain_db
+MONGODB_URI=mongodb://localhost:27017/highlight_explain_mongo
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+JWT_EXPIRES_IN=7d
+
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MAX_TOKENS=500
+OPENAI_TEMPERATURE=0.7
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Logging
+LOG_LEVEL=debug
+LOG_FORMAT=combined
+
+# Security
+CORS_ORIGIN=http://localhost:3000
+HELMET_ENABLED=true
+
+# Monitoring (Future)
+SENTRY_DSN=your-sentry-dsn-here
+```
+
+### Installation Steps
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-org/highlight-explain-api.git
+   cd highlight-explain-api
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up databases**
+   ```bash
+   # PostgreSQL
+   createdb highlight_explain_db
+   npm run db:migrate
+   
+   # MongoDB (if using Docker)
+   docker run -d -p 27017:27017 --name mongo mongo:6
+   ```
+
+4. **Run database migrations**
+   ```bash
+   npm run db:migrate
+   npm run db:seed # Optional: Add sample data
+   ```
+
+5. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+6. **Verify installation**
+   ```bash
+   curl http://localhost:3000/api/health
+   ```
+
+### Development Scripts
+
+```json
+{
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testMatch='**/integration/**/*.test.ts'",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "db:reset": "npm run db:migrate && npm run db:seed",
+    "docker:build": "docker build -t highlight-explain-api .",
+    "docker:run": "docker-compose up -d"
+  }
+}
+```
+
+---
+
+## Testing Strategy
+
+### Testing Pyramid
+
+```mermaid
+graph TB
+    subgraph "Testing Pyramid"
+        E2E[E2E Tests - 10%]
+        Integration[Integration Tests - 30%]
+        Unit[Unit Tests - 60%]
+    end
+    
+    subgraph "Test Types"
+        API[API Tests]
+        Service[Service Tests]
+        Controller[Controller Tests]
+        Database[Database Tests]
+    end
+    
+    E2E --> API
+    Integration --> Controller
+    Integration --> Database
+    Unit --> Service
+```
+
+### Unit Tests (60% of test suite)
+
+**Scope**: Individual functions, methods, and classes in isolation.
+
+```typescript
+// Example: src/features/auth/auth.service.test.ts
+describe('AuthService', () => {
+  describe('hashPassword', () => {
+    it('should generate different hashes for the same password', async () => {
+      const service = new AuthService();
+      const password = 'testPassword123';
+      
+      const hash1 = await service.hashPassword(password);
+      const hash2 = await service.hashPassword(password);
+      
+      expect(hash1).not.toBe(hash2);
+      expect(hash1.length).toBeGreaterThan(20);
+    });
+  });
+  
+  describe('validateToken', () => {
+    it('should return user data for valid token', async () => {
+      const service = new AuthService();
+      const userData = { id: 1, email: 'test@example.com' };
+      const token = await service.generateToken(userData);
+      
+      const result = await service.validateToken(token);
+      
+      expect(result.id).toBe(userData.id);
+      expect(result.email).toBe(userData.email);
+    });
+  });
+});
+```
+
+### Integration Tests (30% of test suite)
+
+**Scope**: Feature interactions, database operations, external service integrations.
+
+```typescript
+// Example: tests/features/highlights/highlight.integration.test.ts
+describe('Highlight Integration', () => {
+  beforeEach(async () => {
+    await clearDatabase();
+    await seedTestUser();
+  });
+
+  it('should create highlight with AI explanation end-to-end', async () => {
+    const token = await getValidJWTToken();
+    
+    const response = await request(app)
+      .post('/api/highlights')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        text: 'console.log("Hello World")',
+        context: 'JavaScript tutorial'
+      })
+      .expect(201);
+
+    expect(response.body.data.explanation.content).toBeDefined();
+    
+    // Verify database storage
+    const savedHighlight = await findHighlightInDB(response.body.data.id);
+    expect(savedHighlight).toBeDefined();
+  });
+});
+```
+
+### E2E Tests (10% of test suite)
+
+**Scope**: Complete user workflows from API to database.
+
+```typescript
+// Example: tests/e2e/user-journey.test.ts
+describe('Complete User Journey', () => {
+  it('should allow user to register, set preferences, and create highlights', async () => {
+    // 1. Register user
+    const registerResponse = await request(app)
+      .post('/api/auth/register')
+      .send(testUserData)
+      .expect(201);
+    
+    const { token } = registerResponse.body.data;
+    
+    // 2. Set preferences
+    await request(app)
+      .put('/api/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ tone: 'technical', includeAnalogies: false })
+      .expect(200);
+    
+    // 3. Create highlight
+    const highlightResponse = await request(app)
+      .post('/api/highlights')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: 'complex code', context: 'advanced tutorial' })
+      .expect(201);
+    
+    // 4. Verify explanation reflects preferences
+    expect(highlightResponse.body.data.explanation.content)
+      .not.toContain('like'); // No analogies
+  });
+});
+```
+
+### Test Configuration
+
+```javascript
+// jest.config.js
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src', '<rootDir>/tests'],
+  testMatch: [
+    '**/__tests__/**/*.ts',
+    '**/?(*.)+(spec|test).ts'
+  ],
+  transform: {
+    '^.+\\.ts$': 'ts-jest',
+  },
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+    '!src/app.ts'
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80
+    }
+  },
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  testTimeout: 10000,
+  // Separate configurations for different test types
+  projects: [
+    {
+      displayName: 'unit',
+      testMatch: ['<rootDir>/src/**/*.test.ts']
+    },
+    {
+      displayName: 'integration',
+      testMatch: ['<rootDir>/tests/integration/**/*.test.ts']
+    },
+    {
+      displayName: 'e2e',
+      testMatch: ['<rootDir>/tests/e2e/**/*.test.ts'],
+      testTimeout: 30000
+    }
+  ]
+};
+```
+
+### Test Data Management
+
+```typescript
+// tests/test-utils/fixtures.ts
+export const testUsers = {
+  validUser: {
+    email: 'test@example.com',
+    password: 'password123',
+    name: 'Test User'
+  },
+  adminUser: {
+    email: 'admin@example.com',
+    password: 'adminpass123',
+    name: 'Admin User'
+  }
+};
+
+export const testHighlights = {
+  simpleCode: {
+    text: 'console.log("Hello")',
+    context: 'JavaScript basics'
+  },
+  complexCode: {
+    text: 'const memoFib = (n, cache = {}) => cache[n] || (cache[n] = n <= 1 ? n : memoFib(n-1, cache) + memoFib(n-2, cache));',
+    context: 'Advanced JavaScript optimization'
+  }
+};
+```
+
+---
+
+## Deployment Guide
+
+### Production Environment Setup
+
+#### Infrastructure Requirements
+
+```mermaid
+graph TB
+    subgraph "Production Infrastructure"
+        LB[Load Balancer]
+        API1[API Instance 1]
+        API2[API Instance 2]
+        DB[(PostgreSQL)]
+        Mongo[(MongoDB)]
+        Redis[(Redis)]
+        Monitor[Monitoring]
+    end
+    
+    Internet --> LB
+    LB --> API1
+    LB --> API2
+    API1 --> DB
+    API1 --> Mongo
+    API1 --> Redis
+    API2 --> DB
+    API2 --> Mongo
+    API2 --> Redis
+    
+    Monitor --> API1
+    Monitor --> API2
+    Monitor --> DB
+    Monitor --> Mongo
+```
+
+#### Docker Configuration
+
+**Dockerfile**
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy source code
+COPY . .
+RUN npm run build
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Change ownership of the app directory
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+CMD ["node", "dist/app.js"]
+```
+
+**docker-compose.yml**
+```yaml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/highlight_db
+      - MONGODB_URI=mongodb://mongo:27017/highlights
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+    restart: unless-stopped
+    
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: highlight_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    
+  mongo:
+    image: mongo:6
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+```
+
+#### Deployment Scripts
+
+**deploy.sh**
+```bash
+#!/bin/bash
+
+set -e
+
+echo "🚀 Starting deployment..."
+
+# Build and tag Docker image
+docker build -t highlight-explain-api:latest .
+docker tag highlight-explain-api:latest highlight-explain-api:$(git rev-parse --short HEAD)
+
+# Run database migrations
+docker-compose exec api npm run db:migrate
+
+# Deploy with zero downtime
+docker-compose up -d --scale api=2 --no-recreate
+
+# Health check
+echo "⏳ Waiting for health check..."
+sleep 30
+
+if curl -f http://localhost:3000/api/health; then
+  echo "✅ Deployment successful!"
+else
+  echo "❌ Health check failed, rolling back..."
+  docker-compose down
+  exit 1
+fi
+
+echo "🎉 Deployment completed successfully!"
+```
+
+### CI/CD Pipeline
+
+**GitHub Actions Workflow (.github/workflows/ci-cd.yml)**
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linting
+      run: npm run lint
+    
+    - name: Run type checking
+      run: npm run type-check
+    
+    - name: Run unit tests
+      run: npm run test:unit
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        MONGODB_URI: mongodb://localhost:27017/test_highlights
+        JWT_SECRET: test-secret
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    
+    - name: Run integration tests
+      run: npm run test:integration
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        MONGODB_URI: mongodb://localhost:27017/test_highlights
+    
+    - name: Generate coverage report
+      run: npm run test:coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production..."
+        # Add your deployment commands here
+        # e.g., deploy to AWS, Google Cloud, etc.
+```
+
+### Environment-Specific Configurations
+
+#### Production Environment Variables
+```bash
+# Production .env
+NODE_ENV=production
+PORT=3000
+
+# Database URLs with connection pooling
+DATABASE_URL=postgresql://user:pass@prod-postgres:5432/highlight_db?sslmode=require&pool_max=20
+MONGODB_URI=mongodb://user:pass@prod-mongo:27017/highlights?authSource=admin&replicaSet=rs0
+
+# Redis for caching and rate limiting
+REDIS_URL=redis://prod-redis:6379/0
+
+# Security
+JWT_SECRET=your-production-jwt-secret-very-long-and-random
+CORS_ORIGIN=https://yourdomain.com
+
+# External Services
+OPENAI_API_KEY=sk-your-production-openai-key
+OPENAI_MODEL=gpt-3.5-turbo
+
+# Monitoring and Logging
+LOG_LEVEL=info
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project
+
+# Rate Limiting (more restrictive in production)
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=60
+```
+
+---
+
+## Security Considerations
+
+### Authentication & Authorization
+
+#### JWT Security Implementation
+```typescript
+// src/shared/services/jwt.service.ts
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+
+export class JWTService {
+  private readonly secret: string;
+  private readonly issuer = 'highlight-explain-api';
+  private readonly audience = 'highlight-explain-users';
+
+  constructor() {
+    this.secret = process.env.JWT_SECRET!;
+    if (this.secret.length < 32) {
+      throw new Error('JWT_SECRET must be at least 32 characters long');
+    }
+  }
+
+  generateToken(payload: TokenPayload): string {
+    const jti = crypto.randomUUID(); // Unique token ID for revocation
+    
+    return jwt.sign(
+      {
+        ...payload,
+        jti,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      this.secret,
+      {
+        expiresIn: '7d',
+        issuer: this.issuer,
+        audience: this.audience,
+        algorithm: 'HS256'
+      }
+    );
+  }
+
+  verifyToken(token: string): TokenPayload {
+    try {
+      return jwt.verify(token, this.secret, {
+        issuer: this.issuer,
+        audience: this.audience,
+        algorithms: ['HS256']
+      }) as TokenPayload;
+    } catch (error) {
+      throw new AuthenticationError('Invalid token');
+    }
+  }
+}
+```
+
+#### Password Security
+```typescript
+// src/features/auth/auth.service.ts
+import bcrypt from 'bcryptjs';
+import { promisify } from 'util';
+
+export class AuthService {
+  private static readonly SALT_ROUNDS = 12;
+  private static readonly MIN_PASSWORD_LENGTH = 8;
+  private static readonly PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+
+  async hashPassword(password: string): Promise<string> {
+    this.validatePasswordStrength(password);
+    return bcrypt.hash(password, AuthService.SALT_ROUNDS);
+  }
+
+  async comparePassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  private validatePasswordStrength(password: string): void {
+    if (password.length < AuthService.MIN_PASSWORD_LENGTH) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    if (!AuthService.PASSWORD_REGEX.test(password)) {
+      throw new ValidationError('Password must contain uppercase, lowercase, number, and special character');
+    }
+  }
+}
+```
+
+### Input Validation & Sanitization
+
+#### Request Validation Middleware
+```typescript
+// src/shared/middleware/validation.middleware.ts
+import { body, query, param, validationResult } from 'express-validator';
+import { Request, Response, NextFunction } from 'express';
+import DOMPurify from 'isomorphic-dompurify';
+
+export const validateHighlight = [
+  body('text')
+    .trim()
+    .isLength({ min: 1, max: 10000 })
+    .withMessage('Text must be between 1 and 10000 characters')
+    .customSanitizer((value: string) => DOMPurify.sanitize(value))
+    .custom((value: string) => {
+      // Prevent code injection attempts
+      const dangerousPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /on\w+\s*=/i,
+        /eval\s*\(/i
+      ];
+      
+      for (const pattern of dangerousPatterns) {
+        if (pattern.test(value)) {
+          throw new Error('Text contains potentially dangerous content');
+        }
+      }
+      return true;
+    }),
+
+  body('context')
+    .optional()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Context must not exceed 1000 characters')
+    .customSanitizer((value: string) => DOMPurify.sanitize(value)),
+
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid input data',
+          details: errors.array()
+        }
+      });
+    }
+    next();
+  }
+];
+```
+
+### Rate Limiting Strategy
+
+```mermaid
+graph TB
+    subgraph "Rate Limiting Layers"
+        Global[Global Rate Limit<br/>100 req/15min]
+        Auth[Auth Endpoints<br/>5 req/15min]
+        AI[AI Endpoints<br/>20 req/hour]
+        User[Per-User Limits<br/>50 req/hour]
+    end
+    
+    Request --> Global
+    Global --> Auth
+    Global --> AI
+    Global --> User
+    
+    style Global fill:#ffebee
+    style Auth fill:#fff3e0
+    style AI fill:#e8f5e8
+    style User fill:#e3f2fd
+```
+
+#### Multi-Layer Rate Limiting
+```typescript
+// src/shared/middleware/rate-limit.middleware.ts
+import rateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import Redis from 'ioredis';
+
+const redis = new Redis(process.env.REDIS_URL);
+
+// Global rate limiting
+export const globalRateLimit = rateLimit({
+  store: new RedisStore({
+    client: redis,
+    prefix: 'rl:global:'
+  }),
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: {
+    error: 'Too many requests from this IP'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Auth endpoint specific limiting
+export const authRateLimit = rateLimit({
+  store: new RedisStore({
+    client: redis,
+    prefix: 'rl:auth:'
+  }),
+  windowMs: 15 * 60 * 1000,
+  max: 5, // Stricter for auth endpoints
+  message: {
+    error: 'Too many authentication attempts'
+  }
+});
+
+// AI endpoint limiting (more expensive operations)
+export const aiRateLimit = rateLimit({
+  store: new RedisStore({
+    client: redis,
+    prefix: 'rl:ai:'
+  }),
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  message: {
+    error: 'AI request limit exceeded'
+  }
+});
+
+// Per-user rate limiting
+export const userRateLimit = rateLimit({
+  store: new RedisStore({
+    client: redis,
+    prefix: 'rl:user:'
+  }),
+  windowMs: 60 * 60 * 1000,
+  max: 50,
+  keyGenerator: (req) => {
+    return req.user?.id?.toString() || req.ip;
+  }
+});
+```
+
+### Data Privacy & GDPR Compliance
+
+#### Data Anonymization
+```typescript
+// src/shared/services/privacy.service.ts
+import crypto from 'crypto';
+
+export class PrivacyService {
+  private static readonly HASH_ALGORITHM = 'sha256';
+
+  // Hash IP addresses for privacy
+  static hashIP(ip: string): string {
+    const salt = process.env.IP_SALT || 'default-salt';
+    return crypto.createHash(this.HASH_ALGORITHM)
+      .update(ip + salt)
+      .digest('hex');
+  }
+
+  // Remove PII from highlight data
+  static sanitizeHighlightForLogging(highlight: any): any {
+    return {
+      id: highlight.id,
+      textLength: highlight.text.length,
+      hasContext: !!highlight.context,
+      confidence: highlight.explanation?.confidence,
+      processingTime: highlight.metadata?.processingTime
+    };
+  }
+
+  // GDPR data export
+  static async exportUserData(userId: number): Promise<UserDataExport> {
+    // Implementation for data export
+    return {
+      user: await this.getUserData(userId),
+      highlights: await this.getUserHighlights(userId),
+      preferences: await this.getUserPreferences(userId),
+      exportDate: new Date().toISOString()
+    };
+  }
+
+  // GDPR data deletion
+  static async deleteUserData(userId: number): Promise<void> {
+    // Implementation for complete data deletion
+    await Promise.all([
+      this.deleteUserHighlights(userId),
+      this.deleteUserPreferences(userId),
+      this.deleteUserAccount(userId)
+    ]);
+  }
+}
+```
+
+---
+
+## Performance & Monitoring
+
+### Performance Optimization Strategies
+
+#### Database Performance
+
+```mermaid
+graph TB
+    subgraph "Database Optimization"
+        Indexes[Strategic Indexing]
+        Pool[Connection Pooling]
+        Cache[Query Caching]
+        Paginate[Pagination]
+    end
+    
+    subgraph "Application Performance"
+        Compress[Response Compression]
+        Async[Async Processing]
+        Memory[Memory Management]
+        CDN[CDN for Static Assets]
+    end
+    
+    Indexes --> Performance[Better Performance]
+    Pool --> Performance
+    Cache --> Performance
+    Paginate --> Performance
+    Compress --> Performance
+    Async --> Performance
+    Memory --> Performance
+    CDN --> Performance
+```
+
+#### Connection Pooling Configuration
+```typescript
+// src/shared/database/postgres.service.ts
+import { Pool } from 'pg';
+
+export class PostgresService {
+  private pool: Pool;
+
+  constructor() {
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 20, // Maximum pool size
+      min: 5,  // Minimum pool size
+      idle: 10000, // Close connections after 10s of inactivity
+      connectionTimeoutMillis: 2000,
+      idleTimeoutMillis: 30000,
+      // SSL configuration for production
+      ssl: process.env.NODE_ENV === 'production' ? {
+        rejectUnauthorized: false
+      } : false
+    });
+
+    // Pool event handlers
+    this.pool.on('connect', (client) => {
+      console.log('New database connection established');
+    });
+
+    this.pool.on('error', (err) => {
+      console.error('Database pool error:', err);
+    });
+  }
+
+  async query(text: string, params?: any[]) {
+    const start = Date.now();
+    try {
+      const result = await this.pool.query(text, params);
+      const duration = Date.now() - start;
+      
+      // Log slow queries
+      if (duration > 1000) {
+        console.warn(`Slow query detected: ${duration}ms`, { text, params });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Database query error:', { text, params, error });
+      throw error;
+    }
+  }
+}
+```
+
+#### Caching Strategy
+```typescript
+// src/shared/services/cache.service.ts
+import Redis from 'ioredis';
+
+export class CacheService {
+  private redis: Redis;
+  private defaultTTL = 3600; // 1 hour
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL);
+  }
+
+  // Cache user preferences (frequently accessed)
+  async cacheUserPreferences(userId: number, preferences: UserPreferences): Promise<void> {
+    const key = `prefs:${userId}`;
+    await this.redis.setex(key, this.defaultTTL, JSON.stringify(preferences));
+  }
+
+  async getUserPreferences(userId: number): Promise<UserPreferences | null> {
+    const key = `prefs:${userId}`;
+    const cached = await this.redis.get(key);
+    return cached ? JSON.parse(cached) : null;
+  }
+
+  // Cache AI responses (expensive to generate)
+  async cacheAIResponse(textHash: string, response: AIResponse): Promise<void> {
+    const key = `ai:${textHash}`;
+    const ttl = 24 * 60 * 60; // 24 hours for AI responses
+    await this.redis.setex(key, ttl, JSON.stringify(response));
+  }
+
+  async getCachedAIResponse(textHash: string): Promise<AIResponse | null> {
+    const key = `ai:${textHash}`;
+    const cached = await this.redis.get(key);
+    return cached ? JSON.parse(cached) : null;
+  }
+
+  // Generate cache key for text + context
+  generateTextHash(text: string, context: string, preferences: UserPreferences): string {
+    const content = `${text}:${context}:${JSON.stringify(preferences)}`;
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+}
+```
+
+### Monitoring & Observability
+
+#### Health Check Implementation
+```typescript
+// src/shared/middleware/health.middleware.ts
+import { Request, Response } from 'express';
+import { PostgresService } from '../database/postgres.service';
+import { MongoService } from '../database/mongo.service';
+import { CacheService } from '../services/cache.service';
+
+interface HealthStatus {
+  status: 'healthy' | 'unhealthy';
+  timestamp: string;
+  version: string;
+  uptime: number;
+  services: {
+    database: ServiceHealth;
+    mongodb: ServiceHealth;
+    redis: ServiceHealth;
+    openai: ServiceHealth;
+  };
+  metrics: {
+    memoryUsage: NodeJS.MemoryUsage;
+    cpuUsage: NodeJS.CpuUsage;
+  };
+}
+
+interface ServiceHealth {
+  status: 'up' | 'down';
+  responseTime: number;
+  lastChecked: string;
+}
+
+export class HealthService {
+  constructor(
+    private postgres: PostgresService,
+    private mongo: MongoService,
+    private cache: CacheService
+  ) {}
+
+  async getHealthStatus(): Promise<HealthStatus> {
+    const startTime = process.hrtime();
+
+    const [databaseHealth, mongoHealth, redisHealth, openaiHealth] = await Promise.allSettled([
+      this.checkDatabase(),
+      this.checkMongoDB(),
+      this.checkRedis(),
+      this.checkOpenAI()
+    ]);
+
+    const isHealthy = [databaseHealth, mongoHealth, redisHealth].every(
+      result => result.status === 'fulfilled' && result.value.status === 'up'
+    );
+
+    return {
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '1.0.0',
+      uptime: process.uptime(),
+      services: {
+        database: databaseHealth.status === 'fulfilled' ? databaseHealth.value : { status: 'down', responseTime: 0, lastChecked: new Date().toISOString() },
+        mongodb: mongoHealth.status === 'fulfilled' ? mongoHealth.value : { status: 'down', responseTime: 0, lastChecked: new Date().toISOString() },
+        redis: redisHealth.status === 'fulfilled' ? redisHealth.value : { status: 'down', responseTime: 0, lastChecked: new Date().toISOString() },
+        openai: openaiHealth.status === 'fulfilled' ? openaiHealth.value : { status: 'down', responseTime: 0, lastChecked: new Date().toISOString() }
+      },
+      metrics: {
+        memoryUsage: process.memoryUsage(),
+        cpuUsage: process.cpuUsage()
+      }
+    };
+  }
+
+  private async checkDatabase(): Promise<ServiceHealth> {
+    const start = Date.now();
+    try {
+      await this.postgres.query('SELECT 1');
+      return {
+        status: 'up',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+
+  private async checkMongoDB(): Promise<ServiceHealth> {
+    const start = Date.now();
+    try {
+      await this.mongo.ping();
+      return {
+        status: 'up',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+
+  private async checkRedis(): Promise<ServiceHealth> {
+    const start = Date.now();
+    try {
+      await this.cache.ping();
+      return {
+        status: 'up',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+
+  private async checkOpenAI(): Promise<ServiceHealth> {
+    const start = Date.now();
+    try {
+      // Simple API call to check OpenAI availability
+      // Implementation depends on OpenAI client setup
+      return {
+        status: 'up',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        responseTime: Date.now() - start,
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+}
+```
+
+#### Logging Strategy
+```typescript
+// src/shared/services/logger.service.ts
+import winston from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
+
+class LoggerService {
+  private logger: winston.Logger;
+
+  constructor() {
+    const logFormat = winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    );
+
+    this.logger = winston.createLogger({
+      level: process.env.LOG_LEVEL || 'info',
+      format: logFormat,
+      defaultMeta: {
+        service: 'highlight-explain-api',
+        version: process.env.npm_package_version
+      },
+      transports: [
+        // Console transport for development
+        new winston.transports.Console({
+          format: winston.format.combine(
+            winston.format.colorize(),
+            winston.format.simple()
+          )
+        }),
+        
+        // File transport for production
+        new DailyRotateFile({
+          filename: 'logs/application-%DATE%.log',
+          datePattern: 'YYYY-MM-DD',
+          maxSize: '20m',
+          maxFiles: '14d',
+          format: logFormat
+        }),
+        
+        // Error file transport
+        new DailyRotateFile({
+          filename: 'logs/error-%DATE%.log',
+          datePattern: 'YYYY-MM-DD',
+          level: 'error',
+          maxSize: '20m',
+          maxFiles: '30d',
+          format: logFormat
+        })
+      ]
+    });
+  }
+
+  // Structured logging methods
+  logAPIRequest(req: any, res: any, duration: number): void {
+    this.logger.info('API Request', {
+      method: req.method,
+      url: req.url,
+      statusCode: res.statusCode,
+      duration,
+      userAgent: req.get('user-agent'),
+      ip: req.ip,
+      userId: req.user?.id
+    });
+  }
+
+  logAIRequest(text: string, context: string, duration: number, success: boolean): void {
+    this.logger.info('AI Request', {
+      textLength: text.length,
+      hasContext: !!context,
+      duration,
+      success,
+      model: process.env.OPENAI_MODEL
+    });
+  }
+
+  logError(error: Error, context?: any): void {
+    this.logger.error('Application Error', {
+      message: error.message,
+      stack: error.stack,
+      context
+    });
+  }
+
+  logSecurityEvent(event: string, details: any): void {
+    this.logger.warn('Security Event', {
+      event,
+      ...details,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+export const logger = new LoggerService();
+```
+
+---
+
+## Future Roadmap
+
+### Phase 2 Features (Next 3 months)
+
+#### 1. Browser Extension
+```mermaid
+graph TB
+    subgraph "Browser Extension Architecture"
+        ContentScript[Content Script]
+        Background[Background Script]
+        Popup[Extension Popup]
+        API[Highlight-Explain API]
+    end
+    
+    ContentScript --> |Text Selection| Background
+    Background --> |Highlight Request| API
+    API --> |Explanation Response| Background
+    Background --> |Display Result| Popup
+    Popup --> |User Interaction| ContentScript
+```
+
+**Features:**
+- Universal text highlighting on any website
+- Real-time explanation overlay
+- Offline explanation caching
+- Cross-browser compatibility (Chrome, Firefox, Safari)
+
+#### 2. Image OCR Integration
+```typescript
+// Future: OCR Service Integration
+interface OCRService {
+  extractText(imageBuffer: Buffer): Promise<{
+    text: string;
+    confidence: number;
+    boundingBoxes: BoundingBox[];
+  }>;
+}
+
+// API Endpoint
+// POST /api/highlights/from-image
+{
+  "image": "base64-encoded-image-data",
+  "context": "Screenshot from programming tutorial"
+}
+```
+
+#### 3. Multi-language Support
+```typescript
+// Future: Language Detection and Translation
+interface LanguageService {
+  detectLanguage(text: string): Promise<string>;
+  translateText(text: string, targetLanguage: string): Promise<string>;
+  localizeExplanation(explanation: string, language: string): Promise<string>;
+}
+```
+
+### Phase 3 Features (6-12 months)
+
+#### 1. Advanced AI Features
+- **Contextual Learning Paths**: Generate follow-up learning materials
+- **Code Analysis**: Deep technical explanations for programming concepts
+- **Concept Mapping**: Visual representation of related concepts
+- **Learning Progress Tracking**: Adaptive difficulty based on user understanding
+
+#### 2. Collaborative Features
+- **Shared Highlights**: Teams can share and discuss explanations
+- **Community Knowledge Base**: User-contributed explanations
+- **Expert Reviews**: Subject matter experts can enhance AI explanations
+- **Discussion Threads**: Comments and discussions on explanations
+
+#### 3. Advanced Analytics
+```mermaid
+graph TB
+    subgraph "Analytics Dashboard"
+        UserMetrics[User Learning Metrics]
+        ContentMetrics[Content Analysis]
+        AIMetrics[AI Performance Metrics]
+        BusinessMetrics[Business KPIs]
+    end
+    
+    subgraph "Data Sources"
+        Highlights[Highlight Data]
+        Interactions[User Interactions]
+        Feedback[User Feedback]
+        Performance[System Performance]
+    end
+    
+    Highlights --> UserMetrics
+    Interactions --> UserMetrics
+    Highlights --> ContentMetrics
+    Feedback --> AIMetrics
+    Performance --> AIMetrics
+    UserMetrics --> BusinessMetrics
+    ContentMetrics --> BusinessMetrics
+```
+
+### Technical Debt & Infrastructure Improvements
+
+#### 1. Microservices Migration
+- Split features into independent microservices
+- Implement event-driven architecture
+- Service mesh for communication
+- Independent scaling and deployment
+
+#### 2. Advanced Monitoring
+- **APM Integration**: Application Performance Monitoring
+- **Distributed Tracing**: Request tracing across services
+- **Custom Metrics**: Business-specific monitoring
+- **Alerting System**: Proactive issue detection
+
+#### 3. Security Enhancements
+- **OAuth 2.0 / OpenID Connect**: Advanced authentication
+- **API Security**: Rate limiting, API keys, request signing
+- **Data Encryption**: At-rest and in-transit encryption
+- **Security Auditing**: Regular security assessments
+
+### Scalability Planning
+
+#### Traffic Growth Projections
+```mermaid
+graph LR
+    subgraph "User Growth"
+        Month1[1K users<br/>10K highlights/month]
+        Month6[10K users<br/>100K highlights/month]
+        Year1[100K users<br/>1M highlights/month]
+        Year2[500K users<br/>10M highlights/month]
+    end
+    
+    Month1 --> Month6
+    Month6 --> Year1
+    Year1 --> Year2
+```
+
+#### Infrastructure Scaling Strategy
+```mermaid
+graph TB
+    subgraph "Current (MVP)"
+        SingleAPI[Single API Instance]
+        SingleDB[(Single Database)]
+    end
+    
+    subgraph "Phase 2 (10K users)"
+        LoadBalancer[Load Balancer]
+        MultiAPI[Multiple API Instances]
+        ReadReplicas[(Read Replicas)]
+        RedisCache[(Redis Cache)]
+    end
+    
+    subgraph "Phase 3 (100K users)"
+        CDN[CDN]
+        Microservices[Microservices]
+        ShardedDB[(Sharded Databases)]
+        MessageQueue[Message Queues]
+    end
+    
+    SingleAPI --> LoadBalancer
+    SingleDB --> ReadReplicas
+    LoadBalancer --> CDN
+    MultiAPI --> Microservices
+    ReadReplicas --> ShardedDB
+    RedisCache --> MessageQueue
+```
+
+---
+
+## Conclusion
+
+This MVP documentation provides a comprehensive foundation for the Highlight-Explain API, covering:
+
+- **Complete technical architecture** with feature-based modular design
+- **Detailed API specifications** with realistic examples
+- **Production-ready deployment strategies** with Docker and CI/CD
+- **Robust security implementations** including authentication, validation, and privacy
+- **Performance optimization techniques** with caching and monitoring
+- **Clear future roadmap** with phased feature development
+
+The modular architecture and comprehensive testing strategy ensure the codebase remains maintainable and scalable as the application grows. The documentation serves as both a technical reference and a development guide for building a production-grade AI-powered text explanation service.
+
+**Key Success Factors:**
+1. **Test-Driven Development** ensures code quality and reliability
+2. **Feature-based architecture** enables independent development and deployment
+3. **Comprehensive monitoring** provides visibility into system health and performance
+4. **Security-first approach** protects user data and system integrity
+5. **Clear documentation** facilitates team collaboration and onboarding
+
+This foundation supports rapid development while maintaining professional standards suitable for production deployment and future scaling.
